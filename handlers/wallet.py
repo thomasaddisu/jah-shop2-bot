@@ -101,7 +101,7 @@ async def _start_topup(query, context, user_id: int) -> None:
     await query.edit_message_text(
         "➕ *Top Up Wallet*\n\n"
         "Please enter the amount you want to deposit:\n"
-        "_(minimum: \\$1\\.00, maximum: \\$10\\,000\\.00)_\n\n"
+        "_\\(minimum: \\$1\\.00, maximum: \\$10\\,000\\.00\\)_\n\n"
         "Example: `50` or `100.50`",
         parse_mode="MarkdownV2",
     )
