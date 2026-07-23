@@ -46,7 +46,7 @@ async def shop_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     log_user_action(user.id, "shop_menu")
     await update.message.reply_chat_action(ChatAction.TYPING)
     await update.message.reply_text(
-        "🛍 *Jah Shop — Categories*\n\nChoose a category to browse products:",
+        "🛍 *Jah Shop — Categories*\n\n Prices are in ETB NOT $ \n\nChoose a category to browse products:",
         parse_mode="MarkdownV2",
         reply_markup=categories_keyboard(),
     )
