@@ -18,6 +18,33 @@ logger = logging.getLogger("jah_shop.handlers.admin_wallet")
 _state: dict[int, dict] = {}
 
 
+async def _safe_edit(
+    query,
+    text: str,
+    parse_mode: str = "MarkdownV2",
+    reply_markup=None,
+) -> None:
+    """Edit the current message safely regardless of whether it is a photo or text message.
+
+    Telegram raises BadRequest if you call edit_message_text on a photo/media message.
+    When the message has media (e.g. the screenshot notification sent via send_photo),
+    we instead strip the inline keyboard from the caption and send a new text reply.
+    """
+    msg = query.message
+    is_media = bool(msg and (msg.photo or msg.video or msg.document or msg.audio or msg.voice))
+
+    if is_media:
+        # Remove the inline keyboard from the photo caption so it's clear the admin acted
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        # Reply with the new text as a fresh message
+        await msg.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+    else:
+        await query.edit_message_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+
+
 async def admin_wallet_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -25,9 +52,9 @@ async def admin_wallet_callback(update: Update, context: ContextTypes.DEFAULT_TY
     data = query.data
 
     if data == "admin:wallet_requests":
-        await query.edit_message_text(
-            "💳 *Wallet Requests*", parse_mode="MarkdownV2",
-            reply_markup=admin_wallet_requests_keyboard()
+        await _safe_edit(
+            query, "💳 *Wallet Requests*",
+            reply_markup=admin_wallet_requests_keyboard(),
         )
 
     elif data.startswith("admin_wr:list:"):
@@ -52,21 +79,21 @@ async def admin_wallet_callback(update: Update, context: ContextTypes.DEFAULT_TY
         rid = data.split(":")[2]
         _state[admin_id] = {"action": "reject", "req_id": rid}
         context.user_data["admin_wr_state"] = True
-        await query.edit_message_text(
-            "❌ *Reject Request*\n\nEnter rejection reason \\(or type `none`\\):",
-            parse_mode="MarkdownV2",
+        await _safe_edit(
+            query,
+            "❌ *Reject Request*\n\nEnter the rejection reason \\(or type `none` to skip\\):",
         )
 
     elif data.startswith("admin_wr:note:"):
         rid = data.split(":")[2]
         _state[admin_id] = {"action": "note", "req_id": rid}
         context.user_data["admin_wr_state"] = True
-        await query.edit_message_text("📝 Enter note for this request:")
+        await _safe_edit(query, "📝 Enter your note for this request:")
 
     elif data == "admin_wr:search":
         _state[admin_id] = {"action": "search"}
         context.user_data["admin_wr_state"] = True
-        await query.edit_message_text("🔍 Enter user ID or request ID:")
+        await _safe_edit(query, "🔍 Enter user ID or request ID:")
 
 
 async def _list_requests(query, filter_type: str, page: int) -> None:
@@ -81,7 +108,7 @@ async def _list_requests(query, filter_type: str, page: int) -> None:
 
     if not reqs:
         label = "pending" if filter_type == "pending" else "wallet"
-        await query.edit_message_text(f"💳 No {label} requests found.", reply_markup=admin_wallet_requests_keyboard())
+        await _safe_edit(query, f"💳 No {label} requests found.", parse_mode=None, reply_markup=admin_wallet_requests_keyboard())
         return
 
     buttons = []
@@ -104,9 +131,9 @@ async def _list_requests(query, filter_type: str, page: int) -> None:
         buttons.append(nav)
     buttons.append([InlineKeyboardButton("⬅️ Back", callback_data="admin:wallet_requests")])
 
-    await query.edit_message_text(
+    await _safe_edit(
+        query,
         f"💳 *Wallet Requests* \\({len(reqs)} total\\)",
-        parse_mode="MarkdownV2",
         reply_markup=InlineKeyboardMarkup(buttons),
     )
 
@@ -114,7 +141,7 @@ async def _list_requests(query, filter_type: str, page: int) -> None:
 async def _view_request(query, rid: str) -> None:
     req = get_wallet_request(rid)
     if not req:
-        await query.edit_message_text("❌ Request not found.", reply_markup=admin_wallet_requests_keyboard())
+        await _safe_edit(query, "❌ Request not found.", parse_mode=None, reply_markup=admin_wallet_requests_keyboard())
         return
     method = PAYMENT_METHODS.get(req.method, req.method)
     status_icon = {"pending": "⏳", "approved": "✅", "rejected": "❌"}.get(req.status, "❓")
@@ -134,26 +161,25 @@ async def _view_request(query, rid: str) -> None:
     kb = admin_wallet_request_actions_keyboard(rid) if req.status == "pending" else \
         InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_wr:list:all:0")]])
 
-    # If there is a screenshot, send it as a photo with the info as caption
+    # If there is a screenshot, send it as a new photo message with action buttons
     if req.screenshot_file_id:
         try:
+            # Remove keyboard from whichever message the admin tapped
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
             await query.message.reply_photo(
                 photo=req.screenshot_file_id,
                 caption=text,
                 parse_mode="MarkdownV2",
                 reply_markup=kb,
             )
-            # Edit the original message to a minimal summary so the thread makes sense
-            await query.edit_message_text(
-                f"💳 *Wallet Request* `{escape_md(req.id)}`\n\n"
-                f"📸 Screenshot sent below\\.",
-                parse_mode="MarkdownV2",
-            )
             return
         except Exception as e:
             logger.warning(f"Could not send screenshot for request {rid}: {e}")
 
-    await query.edit_message_text(text, parse_mode="MarkdownV2", reply_markup=kb)
+    await _safe_edit(query, text, reply_markup=kb)
 
 
 async def _notify_user_wallet(context, user_id: int, amount: float, action: str) -> None:
