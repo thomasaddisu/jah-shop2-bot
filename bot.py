@@ -4,6 +4,7 @@ Jah Shop Bot — Main Entry Point
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 
@@ -136,6 +137,11 @@ def main() -> None:
     app = build_application()
 
     logger.info("Bot is running. Press Ctrl+C to stop.")
+
+    # Create and set an event loop explicitly (Python 3.14 fix)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     app.run_polling(
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True,
