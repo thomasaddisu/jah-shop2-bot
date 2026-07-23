@@ -42,9 +42,9 @@ async def _show_wallet(message, user_id: int) -> None:
     text = (
         f"👛 *Your Wallet*\n\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"💰 *Balance:* `${wallet.balance:.2f}`\n"
-        f"📥 *Total Deposited:* `${wallet.total_deposited:.2f}`\n"
-        f"📤 *Total Spent:* `${wallet.total_spent:.2f}`\n"
+        f"💰 *Balance:* `ETB {wallet.balance:.2f}`\n"
+        f"📥 *Total Deposited:* `ETB {wallet.total_deposited:.2f}`\n"
+        f"📤 *Total Spent:* `ETB {wallet.total_spent:.2f}`\n"
         f"━━━━━━━━━━━━━━━━━━━━\n\n"
         f"Choose an option below:"
     )
@@ -62,9 +62,9 @@ async def wallet_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         text = (
             f"👛 *Your Wallet*\n\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"💰 *Balance:* `${wallet.balance:.2f}`\n"
-            f"📥 *Total Deposited:* `${wallet.total_deposited:.2f}`\n"
-            f"📤 *Total Spent:* `${wallet.total_spent:.2f}`\n"
+            f"💰 *Balance:* `ETB {wallet.balance:.2f}`\n"
+            f"📥 *Total Deposited:* `ETB {wallet.total_deposited:.2f}`\n"
+            f"📤 *Total Spent:* `ETB {wallet.total_spent:.2f}`\n"
             f"━━━━━━━━━━━━━━━━━━━━"
         )
         await query.edit_message_text(text, parse_mode="MarkdownV2", reply_markup=wallet_keyboard())
@@ -101,7 +101,7 @@ async def _start_topup(query, context, user_id: int) -> None:
     await query.edit_message_text(
         "➕ *Top Up Wallet*\n\n"
         "Please enter the amount you want to deposit:\n"
-        "_\\(minimum: \\$1\\.00, maximum: \\$10\\,000\\.00\\)_\n\n"
+        "_\\(minimum: \\ETB 1\\.00, maximum: \\ETB 10\\,000\\.00\\)_\n\n"
         "Example: `50` or `100.50`",
         parse_mode="MarkdownV2",
     )
@@ -120,7 +120,7 @@ async def _handle_payment_method(query, context, user_id: int, method: str) -> N
         address = get_usdt_address()
         instructions = (
             f"₮ *USDT BEP20 Payment*\n\n"
-            f"💰 *Amount:* `${amount:.2f}`\n\n"
+            f"💰 *Amount:* `ETB {amount:.2f}`\n\n"
             f"📋 *Send exactly to this address:*\n"
             f"`{escape_md(address)}`\n\n"
             f"⚠️ *Important:*\n"
@@ -133,16 +133,16 @@ async def _handle_payment_method(query, context, user_id: int, method: str) -> N
         details = get_bank_details()
         instructions = (
             f"🏦 *Bank Transfer Payment*\n\n"
-            f"💰 *Amount:* `${amount:.2f}`\n\n"
+            f"💰 *Amount:* `ETB {amount:.2f}`\n\n"
             f"📋 *Bank Details:*\n"
             f"`{escape_md(details)}`\n\n"
-            f"⚠️ *Include your Telegram ID in the reference:* `{user_id}`\n\n"
+            f"⚠️ *After Payment Send an SMS from your payment phone number Send this number :* `{user_id}`\n\n"
             f"_Your wallet will be credited after admin confirmation\\._"
         )
     else:
         instructions = (
             f"💵 *Manual Payment*\n\n"
-            f"💰 *Amount:* `${amount:.2f}`\n\n"
+            f"💰 *Amount:* `ETB {amount:.2f}`\n\n"
             f"Please contact our support team with proof of payment\\.\n\n"
             f"_Your wallet will be credited after admin confirmation\\._"
         )
@@ -172,7 +172,7 @@ async def _handle_payment_method(query, context, user_id: int, method: str) -> N
     notify_msg = (
         f"💳 *New Wallet Request\\!*\n\n"
         f"👤 *User:* {user_display} \\(`{user_id}`\\)\n"
-        f"💰 *Amount:* `${amount:.2f}`\n"
+        f"💰 *Amount:* `ETB {amount:.2f}`\n"
         f"💳 *Method:* {escape_md(method_name)}\n"
         f"🆔 *Request ID:* `{escape_md(req.id)}`"
     )
@@ -208,7 +208,7 @@ async def _show_transactions(query, user_id: int, page: int = 0) -> None:
         icon = "📥" if txn.type == "credit" else "📤"
         sign = "+" if txn.type == "credit" else "-"
         lines.append(
-            f"{icon} `{sign}${txn.amount:.2f}` — {escape_md(txn.description or txn.type)}\n"
+            f"{icon} `{sign}ETB {txn.amount:.2f}` — {escape_md(txn.description or txn.type)}\n"
             f"   📅 {escape_md(fmt_date(txn.created_at))}"
         )
 
@@ -240,7 +240,7 @@ async def handle_topup_amount_input(update: Update, context: ContextTypes.DEFAUL
     context.user_data["awaiting_topup_method"] = True
 
     await update.message.reply_text(
-        f"💰 *Amount:* `${amount:.2f}`\n\n"
+        f"💰 *Amount:* `ETB {amount:.2f}`\n\n"
         f"Now select your preferred payment method:",
         parse_mode="MarkdownV2",
         reply_markup=payment_method_keyboard(),

@@ -28,7 +28,7 @@ if not ADMIN_IDS:
 # ─── Bot Metadata ────────────────────────────────────────────
 BOT_NAME: str = os.getenv("BOT_NAME", "Jah Shop")
 CURRENCY: str = os.getenv("CURRENCY", "USD")
-SUPPORT_USERNAME: str = os.getenv("SUPPORT_USERNAME", "support")
+SUPPORT_USERNAME: str = os.getenv("SUPPORT_USERNAME", "Frank_wedaj")
 DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 VERSION: str = "1.0.0"
 
@@ -88,9 +88,9 @@ CATEGORIES: dict[str, str] = {
 
 # ─── Payment Methods ─────────────────────────────────────────
 PAYMENT_METHODS: dict[str, str] = {
-    "usdt_bep20": "₮ USDT BEP20",
+    # "usdt_bep20": "₮ USDT BEP20",
     "bank_transfer": "🏦 Bank Transfer",
-    "manual": "💵 Manual Payment",
+    # "manual": "💵 Manual Payment",
 }
 
 # ─── Order Statuses ──────────────────────────────────────────
@@ -113,8 +113,8 @@ WALLET_REQUEST_STATUS = {
 ABOUT_INFO = {
     "company": "Jah Shop",
     "tagline": "Your premium digital goods marketplace",
-    "contact_email": "support@jahshop.com",
-    "working_hours": "24/7 — We never sleep 🌙",
+    "contact_email": "@frank_wedaj",
+    "working_hours": "For now 1-4 at night local time 🌙",
     "terms_url": "https://jahshop.com/terms",
     "privacy_url": "https://jahshop.com/privacy",
     "version": VERSION,
