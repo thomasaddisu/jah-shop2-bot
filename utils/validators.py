@@ -24,15 +24,16 @@ def validate_amount(text: str, min_val: float = 0.01, max_val: float = 100000.0)
     return True, round(value, 2), ""
 
 
-def validate_promo_code(code: str) -> tuple[bool, str]:
+def validate_promo_code(code: str) -> tuple[bool, str, str]:
+    """Returns (valid, normalized_code, error_message)."""
     code = code.strip().upper()
     if not code:
-        return False, "❌ Code cannot be empty."
+        return False, "", "❌ Code cannot be empty."
     if len(code) < 3 or len(code) > 30:
-        return False, "❌ Code must be 3–30 characters."
+        return False, "", "❌ Code must be 3–30 characters."
     if not re.match(r"^[A-Z0-9_\-]+$", code):
-        return False, "❌ Code can only contain letters, digits, _ and -."
-    return True, code
+        return False, "", "❌ Code can only contain letters, digits, _ and -."
+    return True, code, ""
 
 
 def validate_product_price(text: str) -> tuple[bool, float, str]:

@@ -41,7 +41,7 @@ async def handle_promo_check_input(update: Update, context: ContextTypes.DEFAULT
 
     user_id = update.effective_user.id
     code = update.message.text.strip()
-    context.user_data.pop("awaiting_promo_check", None)
+    context.user_data.pop("awaiting_promo_check", None)  # always clear state
 
     promo = get_promo_code(code)
     if not promo:
@@ -59,26 +59,29 @@ async def handle_promo_check_input(update: Update, context: ContextTypes.DEFAULT
         )
         return True
 
-    # Check if already used
+    # Whether this user already used the code
     already_used = user_id in promo.used_by
-    uses_left = (promo.max_uses - promo.uses) if promo.max_uses > 0 else "∞"
+    uses_left: str
+    if promo.max_uses > 0:
+        uses_left = str(promo.max_uses - promo.uses)
+    else:
+        uses_left = "∞"
 
-    discount_text = (
-        f"`{promo.discount_value}%` off"
-        if promo.discount_type == "percentage"
-        else f"`${promo.discount_value:.2f}` off"
-    )
+    if promo.discount_type == "percentage":
+        discount_text = f"`{escape_md(str(promo.discount_value))}%` off"
+    else:
+        discount_text = f"`${escape_md(f'{promo.discount_value:.2f}')}` off"
 
     expires_text = escape_md(promo.expires_at[:10]) if promo.expires_at else "Never"
-    min_text = f"`${promo.min_order_amount:.2f}`" if promo.min_order_amount else "None"
+    min_text = f"`${escape_md(f'{promo.min_order_amount:.2f}')}`" if promo.min_order_amount else "None"
 
-    status_icon = "⚠️ Already Used" if already_used else "✅ Valid"
+    status_icon = "⚠️ Already Used by you" if already_used else "✅ Valid"
     text = (
         f"🎟 *Promo Code: `{escape_md(promo.code)}`*\n\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"💸 *Discount:* {discount_text}\n"
         f"📦 *Min Order:* {min_text}\n"
-        f"🔢 *Uses Left:* {uses_left}\n"
+        f"🔢 *Uses Left:* {escape_md(uses_left)}\n"
         f"📅 *Expires:* {expires_text}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"*Status:* {status_icon}"
@@ -86,3 +89,4 @@ async def handle_promo_check_input(update: Update, context: ContextTypes.DEFAULT
 
     await update.message.reply_text(text, parse_mode="MarkdownV2")
     return True
+

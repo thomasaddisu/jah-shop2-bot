@@ -362,6 +362,8 @@ async def handle_promo_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return True
 
     discount = calculate_discount(promo, product.price)
+    final_price = max(0.0, round(product.price - discount, 2))
+
     _buy_state[user_id] = {
         "product_id": product_id,
         "promo_code": promo.code,
@@ -369,10 +371,36 @@ async def handle_promo_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     }
     context.user_data.pop("awaiting_promo_for", None)
 
-    await update.message.reply_text(
-        f"✅ *Promo code applied\\!*\n"
-        f"💸 Discount: `${discount:.2f}`\n\n"
-        f"Now tap *Buy Now* on the product to confirm\\.",
-        parse_mode="MarkdownV2",
+    # Show updated confirmation directly so the user has a Confirm button to tap
+    from services.wallet_service import get_balance
+    balance = get_balance(user_id)
+    insufficient = balance < final_price
+
+    text = (
+        f"✅ *Promo Code Applied\\!*\n\n"
+        f"📦 *Product:* {escape_md(product.name)}\n"
+        f"💰 *Price:* `${product.price:.2f}`\n"
+        f"🎟 *Promo:* `{escape_md(promo.code)}`\n"
+        f"🏷 *Discount:* \\-`${discount:.2f}`\n"
+        f"✅ *Total:* `${final_price:.2f}`\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👛 *Your Balance:* `${balance:.2f}`\n"
     )
+
+    if insufficient:
+        from keyboards.shop_kb import insufficient_balance_keyboard
+        needed = final_price - balance
+        text += f"⚠️ *Insufficient balance \\(need `${needed:.2f}` more\\)*"
+        await update.message.reply_text(
+            text, parse_mode="MarkdownV2",
+            reply_markup=insufficient_balance_keyboard(product_id),
+        )
+    else:
+        from keyboards.shop_kb import buy_confirm_keyboard
+        text += f"After purchase: `${balance - final_price:.2f}`"
+        await update.message.reply_text(
+            text, parse_mode="MarkdownV2",
+            reply_markup=buy_confirm_keyboard(product_id, promo_applied=True),
+        )
     return True
+
