@@ -106,7 +106,7 @@ class Wallet:
 class WalletRequest:
     __slots__ = (
         "id", "user_id", "amount", "method", "status",
-        "admin_note", "proof", "created_at", "updated_at",
+        "admin_note", "proof", "screenshot_file_id", "created_at", "updated_at",
     )
 
     def __init__(
@@ -117,6 +117,7 @@ class WalletRequest:
         status: str = "pending",
         admin_note: str = "",
         proof: str = "",
+        screenshot_file_id: str = "",
         id: str = "",
         created_at: str = "",
         updated_at: str = "",
@@ -128,6 +129,7 @@ class WalletRequest:
         self.status = status
         self.admin_note = admin_note
         self.proof = proof
+        self.screenshot_file_id = screenshot_file_id
         self.created_at = created_at or _now()
         self.updated_at = updated_at or _now()
 
@@ -135,7 +137,7 @@ class WalletRequest:
     def from_dict(cls, d: dict) -> "WalletRequest":
         return cls(**{k: d.get(k, "") for k in (
             "id", "user_id", "amount", "method", "status",
-            "admin_note", "proof", "created_at", "updated_at",
+            "admin_note", "proof", "screenshot_file_id", "created_at", "updated_at",
         )})
 
     def to_dict(self) -> dict:
@@ -158,7 +160,7 @@ class Order:
         product_id: str,
         product_name: str,
         price: float,
-        currency: str = "USD",
+        currency: str = "ETB",
         status: str = "pending",
         promo_code: str = "",
         discount: float = 0.0,
@@ -249,7 +251,7 @@ class Product:
         category: str,
         description: str,
         price: float,
-        currency: str = "USD",
+        currency: str = "ETB",
         duration: str = "30 days",
         stock: int = 0,
         available: bool = True,

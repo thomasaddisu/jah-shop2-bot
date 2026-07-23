@@ -119,6 +119,7 @@ async def _view_request(query, rid: str) -> None:
     method = PAYMENT_METHODS.get(req.method, req.method)
     status_icon = {"pending": "⏳", "approved": "✅", "rejected": "❌"}.get(req.status, "❓")
     note = f"\n📝 Note: _{escape_md(req.admin_note)}_" if req.admin_note else ""
+    screenshot_info = "\n📸 _Screenshot attached below_" if req.screenshot_file_id else "\n📸 _No screenshot provided_"
     text = (
         f"💳 *Wallet Request*\n\n"
         f"🆔 `{escape_md(req.id)}`\n"
@@ -128,9 +129,30 @@ async def _view_request(query, rid: str) -> None:
         f"Status: {status_icon} {req.status.title()}"
         f"{note}\n"
         f"📅 {escape_md(fmt_date(req.created_at))}"
+        f"{screenshot_info}"
     )
     kb = admin_wallet_request_actions_keyboard(rid) if req.status == "pending" else \
         InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data="admin_wr:list:all:0")]])
+
+    # If there is a screenshot, send it as a photo with the info as caption
+    if req.screenshot_file_id:
+        try:
+            await query.message.reply_photo(
+                photo=req.screenshot_file_id,
+                caption=text,
+                parse_mode="MarkdownV2",
+                reply_markup=kb,
+            )
+            # Edit the original message to a minimal summary so the thread makes sense
+            await query.edit_message_text(
+                f"💳 *Wallet Request* `{escape_md(req.id)}`\n\n"
+                f"📸 Screenshot sent below\\.",
+                parse_mode="MarkdownV2",
+            )
+            return
+        except Exception as e:
+            logger.warning(f"Could not send screenshot for request {rid}: {e}")
+
     await query.edit_message_text(text, parse_mode="MarkdownV2", reply_markup=kb)
 
 

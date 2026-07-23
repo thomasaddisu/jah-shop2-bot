@@ -1,5 +1,12 @@
 """
 Wallet Handler — Balance display, top-up, transactions.
+
+Top-up flow:
+  1. User taps "Top Up" → enters amount
+  2. User selects payment method → sees payment instructions
+  3. User uploads screenshot/photo of payment receipt
+  4. WalletRequest is created; admins are notified with the screenshot
+  5. Admin approves or rejects → user is notified
 """
 
 from __future__ import annotations
@@ -24,9 +31,12 @@ from config import PAGE_SIZE, ADMIN_IDS, PAYMENT_METHODS
 
 logger = logging.getLogger("jah_shop.handlers.wallet")
 
-# State tracking
-_topup_state: dict[int, dict] = {}  # user_id → {amount, method}
+# In-memory state per user.
+# Stages: "awaiting_method" → "awaiting_screenshot"
+_topup_state: dict[int, dict] = {}
 
+
+# ─── Entry Points ─────────────────────────────────────────────
 
 @register_user
 @check_banned
@@ -50,6 +60,8 @@ async def _show_wallet(message, user_id: int) -> None:
     )
     await message.reply_text(text, parse_mode="MarkdownV2", reply_markup=wallet_keyboard())
 
+
+# ─── Callback Router ──────────────────────────────────────────
 
 async def wallet_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -84,8 +96,10 @@ async def wallet_callback_handler(update: Update, context: ContextTypes.DEFAULT_
         await _show_transactions(query, user.id, page=page)
 
 
+# ─── Top-up Flow ──────────────────────────────────────────────
+
 async def _start_topup(query, context, user_id: int) -> None:
-    # Check for existing pending request
+    """Step 1 — Check for pending request, then ask for amount."""
     if has_pending_request(user_id):
         await query.edit_message_text(
             "⚠️ *You already have a pending top\\-up request\\.*\n\n"
@@ -95,8 +109,10 @@ async def _start_topup(query, context, user_id: int) -> None:
         )
         return
 
-    context.user_data["awaiting_topup_amount"] = True
+    # Clear any stale state
     _topup_state.pop(user_id, None)
+    context.user_data["awaiting_topup_amount"] = True
+    context.user_data.pop("awaiting_topup_screenshot", None)
 
     await query.edit_message_text(
         "➕ *Top Up Wallet*\n\n"
@@ -108,10 +124,11 @@ async def _start_topup(query, context, user_id: int) -> None:
 
 
 async def _handle_payment_method(query, context, user_id: int, method: str) -> None:
+    """Step 2 — Show payment details and prompt for screenshot."""
     state = _topup_state.get(user_id, {})
     amount = state.get("amount", 0.0)
     if not amount:
-        await query.edit_message_text("❌ Session expired. Please restart top-up.")
+        await query.edit_message_text("❌ Session expired\\. Please restart top\\-up\\.", parse_mode="MarkdownV2")
         return
 
     method_name = PAYMENT_METHODS.get(method, method)
@@ -125,9 +142,7 @@ async def _handle_payment_method(query, context, user_id: int, method: str) -> N
             f"`{escape_md(address)}`\n\n"
             f"⚠️ *Important:*\n"
             f"• Use BEP20 \\(Binance Smart Chain\\) network only\n"
-            f"• Send the exact amount\n"
-            f"• After payment, your request will be reviewed\n\n"
-            f"_Your wallet will be credited after admin confirmation\\._"
+            f"• Send the exact amount\n\n"
         )
     elif method == "bank_transfer":
         details = get_bank_details()
@@ -137,57 +152,35 @@ async def _handle_payment_method(query, context, user_id: int, method: str) -> N
             f"📋 *Bank Details:*\n"
             f"`{escape_md(details)}`\n\n"
             f"⚠️ *Include your Telegram ID in the reference:* `{user_id}`\n\n"
-            f"_Your wallet will be credited after admin confirmation\\._"
         )
     else:
         instructions = (
             f"💵 *Manual Payment*\n\n"
             f"💰 *Amount:* `${amount:.2f}`\n\n"
-            f"Please contact our support team with proof of payment\\.\n\n"
-            f"_Your wallet will be credited after admin confirmation\\._"
+            f"Please contact support with your payment proof\\.\n\n"
         )
 
-    # Create wallet request
-    req = create_wallet_request(user_id, amount, method)
+    # Advance state to "awaiting_screenshot"
+    _topup_state[user_id] = {
+        "amount": amount,
+        "method": method,
+        "method_name": method_name,
+        "stage": "awaiting_screenshot",
+    }
     context.user_data.pop("awaiting_topup_amount", None)
     context.user_data.pop("awaiting_topup_method", None)
-    _topup_state.pop(user_id, None)
+    context.user_data["awaiting_topup_screenshot"] = True
 
-    from keyboards.menus import back_button
     await query.edit_message_text(
-        instructions + f"\n\n🆔 *Request ID:* `{escape_md(req.id)}`",
+        instructions
+        + "📸 *Upload Your Payment Screenshot*\n\n"
+          "After completing the payment, send a *photo* of your transaction "
+          "receipt here\\. The admin will review and approve your top\\-up\\.",
         parse_mode="MarkdownV2",
-        reply_markup=back_button("wallet:menu"),
     )
 
-    log_user_action(user_id, "topup_request", f"amount={amount}, method={method}, req={req.id}")
 
-    # Notify admins
-    from config import ADMIN_IDS
-    from keyboards.admin_kb import admin_wallet_request_actions_keyboard
-    from services.user_service import get_user
-    user_obj = get_user(user_id)
-    user_display = escape_md(user_obj.display_name if user_obj else str(user_id))
-
-    notify_msg = (
-        f"💳 *New Wallet Request\\!*\n\n"
-        f"👤 *User:* {user_display} \\(`{user_id}`\\)\n"
-        f"💰 *Amount:* `${amount:.2f}`\n"
-        f"💳 *Method:* {escape_md(method_name)}\n"
-        f"🆔 *Request ID:* `{escape_md(req.id)}`"
-    )
-
-    for admin_id in ADMIN_IDS:
-        try:
-            await query.get_bot().send_message(
-                chat_id=admin_id,
-                text=notify_msg,
-                parse_mode="MarkdownV2",
-                reply_markup=admin_wallet_request_actions_keyboard(req.id),
-            )
-        except Exception as e:
-            logger.warning(f"Could not notify admin {admin_id}: {e}")
-
+# ─── Transaction History ──────────────────────────────────────
 
 async def _show_transactions(query, user_id: int, page: int = 0) -> None:
     txns = get_user_transactions(user_id, limit=100)
@@ -219,8 +212,10 @@ async def _show_transactions(query, user_id: int, page: int = 0) -> None:
     )
 
 
+# ─── Stateful Input Handlers ──────────────────────────────────
+
 async def handle_topup_amount_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
-    """Process amount input during top-up flow. Returns True if handled."""
+    """Step 1b — Process the amount the user typed. Returns True if consumed."""
     if not context.user_data.get("awaiting_topup_amount"):
         return False
 
@@ -235,7 +230,7 @@ async def handle_topup_amount_input(update: Update, context: ContextTypes.DEFAUL
         await update.message.reply_text(err)
         return True
 
-    _topup_state[user_id] = {"amount": amount}
+    _topup_state[user_id] = {"amount": amount, "stage": "awaiting_method"}
     context.user_data.pop("awaiting_topup_amount", None)
     context.user_data["awaiting_topup_method"] = True
 
@@ -245,4 +240,88 @@ async def handle_topup_amount_input(update: Update, context: ContextTypes.DEFAUL
         parse_mode="MarkdownV2",
         reply_markup=payment_method_keyboard(),
     )
+    return True
+
+
+async def handle_topup_screenshot_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Step 3 — User uploads a screenshot/photo as payment proof. Returns True if consumed."""
+    if not context.user_data.get("awaiting_topup_screenshot"):
+        return False
+
+    user_id = update.effective_user.id
+    state = _topup_state.get(user_id, {})
+    if state.get("stage") != "awaiting_screenshot":
+        return False
+
+    # Accept photo or image document
+    photo = None
+    if update.message.photo:
+        photo = update.message.photo[-1]          # pick highest resolution
+    elif (
+        update.message.document
+        and update.message.document.mime_type
+        and update.message.document.mime_type.startswith("image/")
+    ):
+        photo = update.message.document
+    else:
+        await update.message.reply_text(
+            "📸 Please send your payment screenshot as a *photo* "
+            "\\(not as a file/document\\)\\.",
+            parse_mode="MarkdownV2",
+        )
+        return True   # still consumed — we stay in the awaiting_screenshot state
+
+    screenshot_file_id = photo.file_id
+    amount: float = state["amount"]
+    method: str = state["method"]
+    method_name: str = state["method_name"]
+
+    # Create wallet request (screenshot stored for admin view)
+    req = create_wallet_request(user_id, amount, method, screenshot_file_id=screenshot_file_id)
+
+    # Clear state
+    _topup_state.pop(user_id, None)
+    context.user_data.pop("awaiting_topup_screenshot", None)
+
+    log_user_action(user_id, "topup_request", f"amount={amount}, method={method}, req={req.id}")
+
+    from keyboards.menus import back_button
+    await update.message.reply_text(
+        f"✅ *Top\\-Up Request Submitted\\!*\n\n"
+        f"💰 *Amount:* `${amount:.2f}`\n"
+        f"💳 *Method:* {escape_md(method_name)}\n"
+        f"🆔 *Request ID:* `{escape_md(req.id)}`\n\n"
+        f"⏳ Your request is under review\\. You will be notified once the "
+        f"admin approves or rejects it\\.",
+        parse_mode="MarkdownV2",
+        reply_markup=back_button("wallet:menu"),
+    )
+
+    # Notify admins with the screenshot photo
+    from keyboards.admin_kb import admin_wallet_request_actions_keyboard
+    from services.user_service import get_user
+    user_obj = get_user(user_id)
+    user_display = escape_md(user_obj.display_name if user_obj else str(user_id))
+
+    caption = (
+        f"📸 *New Top\\-Up Request \\— Screenshot Attached*\n\n"
+        f"👤 *User:* {user_display} \\(`{user_id}`\\)\n"
+        f"💰 *Amount:* `${amount:.2f}`\n"
+        f"💳 *Method:* {escape_md(method_name)}\n"
+        f"🆔 *Request ID:* `{escape_md(req.id)}`\n\n"
+        f"Review the screenshot above and approve or reject below\\."
+    )
+
+    for admin_id in ADMIN_IDS:
+        try:
+            await update.message.get_bot().send_photo(
+                chat_id=admin_id,
+                photo=screenshot_file_id,
+                caption=caption,
+                parse_mode="MarkdownV2",
+                reply_markup=admin_wallet_request_actions_keyboard(req.id),
+            )
+        except Exception as exc:
+            logger.warning(f"Could not notify admin {admin_id}: {exc}")
+
     return True

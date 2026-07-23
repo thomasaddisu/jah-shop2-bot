@@ -108,10 +108,20 @@ _REQUESTS_KEY = "wallet_requests"
 _req_db = get_db(WALLETS_FILE, {"wallets": [], "wallet_requests": []})
 
 
-def create_wallet_request(user_id: int, amount: float, method: str) -> WalletRequest:
+def create_wallet_request(
+    user_id: int,
+    amount: float,
+    method: str,
+    screenshot_file_id: str = "",
+) -> WalletRequest:
     data = _req_db.read()
     requests = data.get(_REQUESTS_KEY, [])
-    req = WalletRequest(user_id=user_id, amount=amount, method=method)
+    req = WalletRequest(
+        user_id=user_id,
+        amount=amount,
+        method=method,
+        screenshot_file_id=screenshot_file_id,
+    )
     requests.append(req.to_dict())
     data[_REQUESTS_KEY] = requests
     _req_db.write(data)

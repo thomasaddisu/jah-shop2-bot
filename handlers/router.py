@@ -156,7 +156,7 @@ async def _handle_admin_input(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def _handle_media_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle photo/document/video from admin (broadcast or product image)."""
+    """Handle photo/document/video from any user (screenshot proof or admin broadcast/image)."""
     if not update.message:
         return
     user = update.effective_user
@@ -172,3 +172,8 @@ async def _handle_media_message(update: Update, context: ContextTypes.DEFAULT_TY
         from handlers.admin_broadcast import handle_admin_broadcast_input
         if await handle_admin_broadcast_input(update, context):
             return
+
+    # Allow regular users to send their payment screenshot
+    from handlers.wallet import handle_topup_screenshot_input
+    if await handle_topup_screenshot_input(update, context):
+        return
